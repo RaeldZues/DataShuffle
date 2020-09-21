@@ -35,6 +35,7 @@ static BOOL GenKeyHandle(OUT BCRYPT_KEY_HANDLE* pKeyHandle, IN LPCWSTR pszAlgId,
 			retVal = FALSE;
 		}
 		retVal = FALSE;
+		return retVal;
 	}
 	// Set properties
 	// TODO: Figure out if I need any properties or not
@@ -72,8 +73,6 @@ BOOL CryptoInitialize(IN OUT HCRYPTKEY* hCryptKey, IN OUT HCRYPTPROV* provider, 
 	if (status != TRUE || INVALID_HANDLE_VALUE == pKeyHandle)
 		return status;
 
-	ULONG cbOutput = 0;
-
 	// Public Key setup
 	// Get the proper size
 	if (!NT_SUCCESS(BCryptExportKey(pKeyHandle, NULL, BCRYPT_RSAPUBLIC_BLOB, NULL, 0, pubSize, 0)))
@@ -88,7 +87,6 @@ BOOL CryptoInitialize(IN OUT HCRYPTKEY* hCryptKey, IN OUT HCRYPTPROV* provider, 
 		return FALSE;
 	}
 
-	BCRYPT_RSAKEY_BLOB* data = (BCRYPT_RSAKEY_BLOB*)publicKey;
 	// Private Key Setup
 	if (!NT_SUCCESS(BCryptExportKey(pKeyHandle, NULL, BCRYPT_RSAPRIVATE_BLOB, NULL, 0, privSize, 0)))
 	{
@@ -132,7 +130,7 @@ BOOL EncryptData(IN PUCHAR PublicKeyBlob, IN ULONG PublicKeySize, OUT PUCHAR* En
 	paddingInfo.cbLabel = 0;
 
 	// Open algorithm
-	if (!NT_SUCCESS(success = BCryptOpenAlgorithmProvider(&hAlgorithm, pszAlgId, NULL, 0)))
+	if (!NT_SUCCESS(success = BCryptOpenAlgorithmProvider(&hAlgorithm, paddingInfo.pszAlgId, NULL, 0)))
 	{
 		retVal = FALSE;
 		return retVal;
@@ -151,9 +149,6 @@ BOOL EncryptData(IN PUCHAR PublicKeyBlob, IN ULONG PublicKeySize, OUT PUCHAR* En
 		return retVal;
 	}
 
-	
-
-	ULONG size = 0;
 	// Encrypt nothing to get size
 	if (!NT_SUCCESS(success = BCryptEncrypt(hPublicKey, InputData, InputDataSize, NULL, NULL,	0, NULL, 0, EncryptedBufferSize, BCRYPT_PAD_PKCS1)))
 	{
@@ -223,7 +218,7 @@ BOOL DecryptData(IN PUCHAR PrivateKeyBlob, IN ULONG PrivateKeySize, OUT IN PUCHA
 		retVal = FALSE;
 		return retVal;
 	}
-	BCRYPT_RSAKEY_BLOB* pub = (BCRYPT_RSAKEY_BLOB*)&hPrivateKey;	
+		
 	//Get correct size of decrypted data	
 	if (!NT_SUCCESS(success = BCryptDecrypt(hPrivateKey, CipherText, CipherTextLength, NULL, NULL, 0, NULL, 0, DecryptedTextLength,	BCRYPT_PAD_PKCS1)))
 	{
