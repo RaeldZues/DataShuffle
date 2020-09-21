@@ -1,5 +1,10 @@
 #include "Shuffle.h"
 
+#include <bcrypt.h>
+
+#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
+#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
+
 /// <summary>
 /// <para>- Open the algorithm provider </para>
 /// <para>- Create a key pair CSP Blob </para>
@@ -116,7 +121,7 @@ BOOL CryptoInitialize(IN OUT HCRYPTKEY* hCryptKey, IN OUT HCRYPTPROV* provider, 
 /// <param name="PtLen"></param>
 /// <param name="pszAlgId"></param>
 /// <returns></returns>
-BOOL EncryptData(IN PUCHAR PublicKey, IN ULONG PublicKeySize, OUT PUCHAR* EncryptedBuffer, PULONG EncryptedBufferSize, PUCHAR InputData, ULONG InputDataSize, IN LPCWSTR pszAlgId)
+BOOL EncryptData(IN PUCHAR PublicKeyBlob, IN ULONG PublicKeySize, OUT PUCHAR* EncryptedBuffer, PULONG EncryptedBufferSize, PUCHAR InputData, ULONG InputDataSize, IN LPCWSTR pszAlgId)
 {
 	BCRYPT_ALG_HANDLE hAlgorithm = INVALID_HANDLE_VALUE;
 	BOOL retVal = TRUE;
@@ -135,12 +140,19 @@ BOOL EncryptData(IN PUCHAR PublicKey, IN ULONG PublicKeySize, OUT PUCHAR* Encryp
 
 	// Import key pair
 	BCRYPT_KEY_HANDLE hPublicKey = 0;
-	if (!NT_SUCCESS(success = BCryptImportKeyPair(hAlgorithm, NULL, BCRYPT_RSAPUBLIC_BLOB, &hPublicKey, PublicKey, PublicKeySize, BCRYPT_NO_KEY_VALIDATION)))
+	if (!NT_SUCCESS(success = BCryptImportKeyPair(hAlgorithm, NULL, BCRYPT_RSAPUBLIC_BLOB, &hPublicKey, PublicKeyBlob, PublicKeySize, BCRYPT_NO_KEY_VALIDATION)))
 	{
 		retVal = FALSE;
+		// Close the algorithm on error 
+		if (!NT_SUCCESS(success = BCryptCloseAlgorithmProvider(hAlgorithm, 0)))
+		{
+			retVal = FALSE;
+		}
 		return retVal;
 	}
+
 	
+
 	ULONG size = 0;
 	// Encrypt nothing to get size
 	if (!NT_SUCCESS(success = BCryptEncrypt(hPublicKey, InputData, InputDataSize, NULL, NULL,	0, NULL, 0, EncryptedBufferSize, BCRYPT_PAD_PKCS1)))
@@ -162,6 +174,7 @@ BOOL EncryptData(IN PUCHAR PublicKey, IN ULONG PublicKeySize, OUT PUCHAR* Encryp
 		retVal = FALSE;
 		return retVal;
 	}
+	
 	// Close the algorithm
 	if (!NT_SUCCESS(success = BCryptCloseAlgorithmProvider(hAlgorithm, 0)))
 	{
@@ -170,9 +183,6 @@ BOOL EncryptData(IN PUCHAR PublicKey, IN ULONG PublicKeySize, OUT PUCHAR* Encryp
 	}
 	return TRUE;
 }
-
-
-//DecryptData(privateKey, privSize, CipherText, CipherTextLength, &DecryptedText, &DecryptedSize, BCRYPT_RSA_ALGORITHM);
 
 /// <summary>
 /// <para>- Open the algoirthm</para>
@@ -206,7 +216,6 @@ BOOL DecryptData(IN PUCHAR PrivateKeyBlob, IN ULONG PrivateKeySize, OUT IN PUCHA
 		retVal = FALSE;
 		return retVal;
 	}
-
 	// Import key pair
 	BCRYPT_KEY_HANDLE hPrivateKey = 0;
 	if (!NT_SUCCESS(BCryptImportKeyPair(hAlgorithm, NULL, BCRYPT_RSAPRIVATE_BLOB, &hPrivateKey, PrivateKeyBlob, PrivateKeySize, BCRYPT_NO_KEY_VALIDATION)))
@@ -214,10 +223,8 @@ BOOL DecryptData(IN PUCHAR PrivateKeyBlob, IN ULONG PrivateKeySize, OUT IN PUCHA
 		retVal = FALSE;
 		return retVal;
 	}
-	BCRYPT_RSAKEY_BLOB* pub = (BCRYPT_RSAKEY_BLOB*)&hPrivateKey;
-	
-	//Get correct size of decrypted data
-	
+	BCRYPT_RSAKEY_BLOB* pub = (BCRYPT_RSAKEY_BLOB*)&hPrivateKey;	
+	//Get correct size of decrypted data	
 	if (!NT_SUCCESS(success = BCryptDecrypt(hPrivateKey, CipherText, CipherTextLength, NULL, NULL, 0, NULL, 0, DecryptedTextLength,	BCRYPT_PAD_PKCS1)))
 	{
 		retVal = FALSE;
@@ -238,4 +245,31 @@ BOOL DecryptData(IN PUCHAR PrivateKeyBlob, IN ULONG PrivateKeySize, OUT IN PUCHA
 		return retVal;
 	}
 	return TRUE;
+}
+
+/// <summary>
+/// 
+/// </summary>
+/// <param name="hKey"></param>
+/// <param name="PublicKeyBlob"></param>
+/// <param name="pubSize"></param>
+/// <param name="PrivateKeyBlob"></param>
+/// <param name="privSize"></param>
+/// <returns></returns>
+BOOL CryptoDestroy(IN HCRYPTKEY hKey, PUCHAR PublicKeyBlob, ULONG pubSize, PUCHAR PrivateKeyBlob, ULONG privSize)
+{
+	BOOL retVal = TRUE;
+	if (hKey)
+	{
+		if (!CryptDestroyKey(hKey))
+			retVal = FALSE;
+	}
+	SecureZeroMemory(PublicKeyBlob, pubSize);
+	if (!HeapFree(GetProcessHeap(), 0, PublicKeyBlob))
+		retVal = FALSE;
+	SecureZeroMemory(PrivateKeyBlob, privSize);
+	if (!HeapFree(GetProcessHeap(), 0, PrivateKeyBlob))
+		retVal = FALSE;
+
+	return retVal;
 }
