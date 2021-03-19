@@ -11,7 +11,7 @@ int main()
 	PUCHAR privateKey = 0;
 	ULONG privSize = 0;
 	ULONG pubSize = 0;
-	PUCHAR PlainText = "\nThis is my plain text data with some more data on top of it\nHere is some more shit to addgohome\n";
+	PUCHAR PlainText = "\nThis is my plain text data with some more data on top of it\nHere is some more stuff to addgohome\n";
 	SIZE_T PtLen = strlen(PlainText);
 	PUCHAR DecryptedText = NULL;
 	ULONG DecryptedSize = 0;
